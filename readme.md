@@ -178,7 +178,7 @@ In this pipeline: $T_{\text{low}} = 50$, $T_{\text{high}} = 150$.
 
 ### 2. Patch Extraction and Sampling
 
-Edge pixels $(x, y)$ where $\text{edge\_map}(x,y) > 0$ are collected and subsampled at a spacing of $s = 30$ pixels. For each sampled edge point, a $20 \times 20$ patch centred on that point is extracted from the full-colour image.
+Edge pixels $(x, y)$ where $\text{edge\map}(x,y) > 0$ are collected and subsampled at a spacing of $s = 30$ pixels. For each sampled edge point, a $20 \times 20$ patch centred on that point is extracted from the full-colour image.
 
 If more than $N_{\max} = 500$ patches are produced, they are uniformly subsampled using linearly spaced indices:
 
