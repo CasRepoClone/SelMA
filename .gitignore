@@ -1,0 +1,4 @@
+./output/*
+./images_upright/*
+.venv
+./ai.md
