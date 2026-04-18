@@ -1,6 +1,5 @@
-
-# SelMA — Selective Edge Location Matching & Assessment
 <img width="1254" height="383" alt="Untitled-2" src="https://github.com/user-attachments/assets/c2600861-4699-4cee-ac25-e8b5341c5308" />
+# SelMA — Selective Edge Location Matching & Assessment
 
 A two-stage visual place recognition pipeline that combines structural edge-based local feature extraction with self-supervised vision transformer representations. **SelMA** (Selective Edge Location Matching & Assessment) identifies the location of a query photograph by matching it against a geo-tagged database of reference images, addressing challenges such as extreme illumination change (day-to-night), viewpoint variation, and perceptual aliasing. The system identifies the location of a query photograph by matching it against a geo-tagged database of reference images, addressing challenges such as extreme illumination change (day-to-night), viewpoint variation, and perceptual aliasing.
 
