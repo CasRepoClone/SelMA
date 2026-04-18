@@ -22,8 +22,8 @@ A two-stage visual place recognition pipeline that combines structural edge-base
 | Requirement | Version |
 |---|---|
 | Python | ≥ 3.10 |
-| CUDA | ≥ 12.8 (for GPU acceleration) |
-| GPU VRAM | ≥ 4 GB recommended |
+| CUDA | ≥ 12.8 (optional for GPU acceleration) |
+| GPU VRAM | ≥ 8 GB recommended |
 
 ### 1. Clone and enter the repository
 
