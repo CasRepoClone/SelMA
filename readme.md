@@ -28,7 +28,7 @@ A two-stage visual place recognition pipeline that combines structural edge-base
 ### 1. Clone and enter the repository
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/CasRepoClone/SelMA.git
 cd MyPaper
 ```
 
