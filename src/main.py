@@ -84,6 +84,9 @@ def main():
 
     print(f"  Indexed {len(db_entries)} DB images with valid patches")
 
+    # Build lookup dict for O(1) candidate retrieval (replaces linear scan)
+    db_lookup = {str(p): (f, pts) for p, f, pts in db_entries}
+
     print("Processing query images...")
     query_paths = get_query_images()
     print(f"  Found {len(query_paths)} query images")
@@ -117,12 +120,8 @@ def main():
         for rank_idx in range(shortlist_n):
             cand_path, avg_sim, top_k_avg = rankings[rank_idx]
 
-            # Retrieve DB features and points
-            cand_features, cand_points = None, None
-            for p, f, pts in db_entries:
-                if p == cand_path:
-                    cand_features, cand_points = f, pts
-                    break
+            # O(1) dict lookup instead of linear scan
+            cand_features, cand_points = db_lookup[str(cand_path)]
 
             # Use ALL patches for detailed matching on shortlisted candidates
             pairs, _, _ = match_features(

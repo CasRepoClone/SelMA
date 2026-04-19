@@ -26,8 +26,7 @@ def sample_edge_points(edge_map, spacing=None):
     points = np.stack([xs, ys], axis=1)
 
     if spacing > 1 and len(points) > 0:
-        indices = np.arange(0, len(points), spacing)
-        points = points[indices]
+        points = points[::spacing]
 
     return points
 
@@ -36,19 +35,28 @@ def extract_patches(image, points, patch_size=None):
     patch_size = patch_size or settings.PATCH_SIZE
     half = patch_size // 2
     h, w = image.shape[:2]
-    patches = []
-    valid_points = []
 
-    for x, y in points:
-        x1, y1 = x - half, y - half
-        x2, y2 = x + half, y + half
+    if len(points) == 0:
+        return [], []
 
-        if x1 < 0 or y1 < 0 or x2 > w or y2 > h:
-            continue
+    points_arr = np.asarray(points)
+    xs = points_arr[:, 0]
+    ys = points_arr[:, 1]
 
-        patch = image[y1:y2, x1:x2].copy()
-        patches.append(patch)
-        valid_points.append((x, y))
+    # Vectorized boundary check
+    valid_mask = (
+        (xs - half >= 0) & (ys - half >= 0) &
+        (xs + half <= w) & (ys + half <= h)
+    )
+    valid_pts = points_arr[valid_mask]
+
+    if len(valid_pts) == 0:
+        return [], []
+
+    # Extract patches — valid_pts columns are (x, y)
+    patches = [image[y - half:y + half, x - half:x + half].copy()
+               for x, y in valid_pts]
+    valid_points = [(int(x), int(y)) for x, y in valid_pts]
 
     return patches, valid_points
 
@@ -83,17 +91,28 @@ def detect_edge_keypoints(gray, edge_map, max_corners=None,
     edge_dilated = cv2.dilate(edge_map, kernel)
 
     points = corners.reshape(-1, 2)
-    valid = []
-    for x, y in points:
-        xi, yi = int(round(x)), int(round(y))
-        if 0 <= yi < edge_dilated.shape[0] and 0 <= xi < edge_dilated.shape[1]:
-            if edge_dilated[yi, xi] > 0:
-                valid.append((xi, yi))
 
-    if len(valid) > max_corners:
-        valid = valid[:max_corners]
+    # Vectorized edge proximity filter
+    xi = np.round(points[:, 0]).astype(int)
+    yi = np.round(points[:, 1]).astype(int)
+    h_ed, w_ed = edge_dilated.shape[:2]
 
-    return np.array(valid, dtype=int) if valid else np.empty((0, 2), dtype=int)
+    in_bounds = (yi >= 0) & (yi < h_ed) & (xi >= 0) & (xi < w_ed)
+    on_edge = np.zeros(len(points), dtype=bool)
+    bounded_idx = np.where(in_bounds)[0]
+    if len(bounded_idx) > 0:
+        on_edge[bounded_idx] = edge_dilated[
+            yi[bounded_idx], xi[bounded_idx]] > 0
+
+    valid_pts = np.column_stack([xi, yi])[on_edge]
+
+    if len(valid_pts) == 0:
+        return np.empty((0, 2), dtype=int)
+
+    if len(valid_pts) > max_corners:
+        valid_pts = valid_pts[:max_corners]
+
+    return valid_pts.astype(int)
 
 
 def get_edge_patches(image, patch_size=None, spacing=None,
