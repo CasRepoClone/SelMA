@@ -1,7 +1,7 @@
 <img width="1254" height="383" alt="Untitled-2" src="https://github.com/user-attachments/assets/c2600861-4699-4cee-ac25-e8b5341c5308" />
 
 # SelMA — Selective Edge Location Matching & Assessment
-A two-stage visual place recognition pipeline that combines structural edge-based local feature extraction with self-supervised vision transformer representations. **SelMA** (Selective Edge Location Matching & Assessment) identifies the location of a query photograph by matching it against a geo-tagged database of reference images, addressing challenges such as extreme illumination change (day-to-night), viewpoint variation, and perceptual aliasing. The system identifies the location of a query photograph by matching it against a geo-tagged database of reference images, addressing challenges such as extreme illumination change (day-to-night), viewpoint variation, and perceptual aliasing.
+A two-stage visual place recognition pipeline that combines structural edge-based local feature extraction with self-supervised vision transformer representations. **SelMA** (Selective Edge Location Matching & Assessment) identifies the location of a query photograph by matching it against a geo-tagged database of reference images, addressing challenges such as extreme illumination change (day-to-night), viewpoint variation, and perceptual aliasing.
 
 ## Table of Contents
 
@@ -31,7 +31,7 @@ A two-stage visual place recognition pipeline that combines structural edge-base
 
 ```bash
 git clone https://github.com/CasRepoClone/SelMA.git
-cd MyPaper
+cd SelMA
 ```
 
 ### 2. Create a virtual environment
@@ -99,6 +99,11 @@ python main.py [OPTIONS]
 | `--ransac-iters` | | Maximum RANSAC iterations | `2000` |
 | `--ransac-confidence` | | RANSAC confidence level | `0.999` |
 | `--ransac-min-inliers` | | Minimum inlier count to accept a match | `8` |
+| `--benchmark` | | Run benchmark evaluation instead of normal matching | `false` |
+| `--benchmark-scene` | | Path to benchmark scene directory | — |
+| `--benchmark-max-pairs` | | Limit number of pairs to evaluate | all |
+| `--benchmark-pose-method` | | Pose estimation method: `essential`, `fundamental` | `essential` |
+| `--descriptor` | | Descriptor type: `sift`, `dinov2` | `sift` |
 
 ### Examples
 
@@ -143,7 +148,7 @@ Conventional approaches rely on hand-crafted local features (SIFT, ORB) or globa
 
 The system operates in two stages:
 
-**Stage 1 — Coarse Retrieval.** Each image (query and database) is processed through the same feature extraction pipeline: Canny edge detection → edge-point sampling → patch extraction → Gaussian denoising → DINOv2 encoding. This produces a set of 384-dimensional feature vectors anchored to structurally salient locations. Database images are ranked by the average cosine similarity of the top-$k$ most confident patch correspondences, yielding a shortlist of $N_s$ candidates.
+**Stage 1 — Coarse Retrieval.** Each image (query and database) is processed through the same feature extraction pipeline: Canny edge detection → edge-point sampling → patch extraction → Gaussian denoising → DINOv2 encoding. This produces a set of 384-dimensional feature vectors anchored to structurally salient locations. Database images are ranked by the average cosine similarity of the top-$k$ most confident patch correspondences, yielding a shortlist of $N_s$ candidates. When edge keypoints are enabled (default), Shi-Tomasi corners near Canny edges are used instead of uniform edge sampling for more repeatable keypoint detection.
 
 **Stage 2 — Geometric Re-ranking.** Each shortlisted candidate undergoes full-patch matching followed by RANSAC geometric verification. A heuristic scoring function combines feature similarity and geometric consistency:
 
@@ -179,9 +184,9 @@ In this pipeline: $T_{\text{low}} = 50$, $T_{\text{high}} = 150$.
 
 ### 2. Patch Extraction and Sampling
 
-Edge pixels $(x, y)$ where $\text{edge\map}(x,y) > 0$ are collected and subsampled at a spacing of $s = 30$ pixels. For each sampled edge point, a $20 \times 20$ patch centred on that point is extracted from the full-colour image.
+Edge pixels $(x, y)$ where $\text{edge\_map}(x,y) > 0$ are collected and subsampled at a spacing of $s = 15$ pixels. For each sampled edge point, a $64 \times 64$ patch centred on that point is extracted from the full-colour image.
 
-If more than $N_{\max} = 500$ patches are produced, they are uniformly subsampled using linearly spaced indices:
+If more than $N_{\max} = 2000$ patches are produced, they are uniformly subsampled using linearly spaced indices:
 
 $$\text{indices} = \left\lfloor \text{linspace}(0,\; |\mathcal{P}| - 1,\; N_{\max}) \right\rfloor$$
 
@@ -189,7 +194,7 @@ This ensures even spatial coverage across the image.
 
 ### 3. Gaussian Denoising
 
-Each $20 \times 20$ patch is denoised via a Gaussian blur with a $3 \times 3$ kernel:
+Each $64 \times 64$ patch is denoised via a Gaussian blur with a $3 \times 3$ kernel:
 
 $$P_{\text{denoised}}(x,y) = \sum_{i=-1}^{1} \sum_{j=-1}^{1} G(i,j) \cdot P(x+i,\; y+j)$$
 
@@ -201,7 +206,7 @@ where $G$ is a normalised 2D Gaussian kernel. This removes sensor noise while pr
 
 #### Vision Transformer Architecture
 
-Each $20 \times 20$ patch is resized to $56 \times 56$ pixels and split into a grid of $4 \times 4 = 16$ non-overlapping tokens of size $14 \times 14$. A learnable `[CLS]` token is prepended, yielding $N = 17$ tokens.
+Each $64 \times 64$ patch is resized to $112 \times 112$ pixels and split into a grid of $8 \times 8 = 64$ non-overlapping tokens of size $14 \times 14$. A learnable `[CLS]` token is prepended, yielding $N = 65$ tokens.
 
 **Patch embedding.** A linear projection maps each $14 \times 14 \times 3$ token to a $d = 384$ dimensional vector:
 
@@ -300,7 +305,7 @@ A match is classified as geometrically verified if the number of RANSAC inliers 
 ## Project Structure
 
 ```
-MyPaper/
+SelMA/
 ├── src/
 │   ├── main.py                       # Pipeline entry point
 │   ├── config/
@@ -318,11 +323,30 @@ MyPaper/
 │   │   └── denoise.py                # Gaussian / Non-Local Means denoising
 │   ├── ModelFuncs/
 │   │   ├── __init__.py
-│   │   ├── feature_extractor.py      # DINOv2 ViT-S/14 wrapper
-│   │   └── matcher.py                # Cosine similarity, ranking, heuristic scoring
-│   └── ransac/
+│   │   ├── feature_extractor.py      # DINOv2 ViT-S/14 wrapper + SIFT extractor
+│   │   ├── matcher.py                # Cosine similarity, ranking, heuristic scoring
+│   │   └── match_filter.py           # Pre-RANSAC match filtering
+│   ├── ransac/
+│   │   ├── __init__.py
+│   │   └── geometric_filter.py       # RANSAC (fundamental / homography / affine)
+│   ├── calibration/
+│   │   ├── __init__.py
+│   │   ├── calibrate.py              # Camera calibration from checkerboard images
+│   │   └── colmap_parser.py          # COLMAP binary model parser
+│   ├── benchmark/
+│   │   ├── __init__.py
+│   │   ├── dataset.py                # Benchmark scene loader (COLMAP / HDF5 / JSON)
+│   │   ├── evaluate.py               # Benchmark evaluation runner
+│   │   └── metrics.py                # Pose estimation and mAA metrics
+│   └── evaluation/
 │       ├── __init__.py
-│       └── geometric_filter.py       # RANSAC (fundamental / homography / affine)
+│       ├── dataset.py                # Evaluation scene loader
+│       ├── evaluate.py               # Evaluation runner with visualizations
+│       └── metrics.py                # Pose estimation and mAA metrics
+├── scripts/
+│   ├── create_test_scene.py          # Generate synthetic benchmark scene
+│   └── download_benchmark.py         # Download phototourism benchmark data
+├── demo_results/                     # Sample output visualizations
 ├── images_upright/
 │   ├── db/                           # Database images (4,479)
 │   └── query/                        # Query images (947)
@@ -330,8 +354,7 @@ MyPaper/
 │       └── night/                    # Nighttime queries
 ├── output/                           # Timestamped result folders
 ├── requirements.txt                  # Pinned Python dependencies
-├── readme.md                         # This document
-└── ai.md                             # AI-assisted development notes
+└── readme.md                         # This document
 ```
 
 ---
@@ -346,9 +369,9 @@ All default parameters are defined in [`src/config/settings.py`](src/config/sett
 |---|---|---|
 | `CANNY_LOW_THRESH` | 50 | Lower hysteresis threshold for Canny |
 | `CANNY_HIGH_THRESH` | 150 | Upper hysteresis threshold for Canny |
-| `PATCH_SIZE` | 20 | Side length of extracted patches (px) |
-| `PATCH_SPACING` | 30 | Minimum spacing between sampled edge points (px) |
-| `MAX_PATCHES` | 500 | Maximum patches retained per image |
+| `PATCH_SIZE` | 64 | Side length of extracted patches (px) |
+| `PATCH_SPACING` | 15 | Minimum spacing between sampled edge points (px) |
+| `MAX_PATCHES` | 2000 | Maximum patches retained per image |
 | `DENOISE_METHOD` | `"gaussian"` | `"gaussian"` or `"nlmeans"` |
 | `DENOISE_GAUSSIAN_KERNEL` | 3 | Gaussian blur kernel size |
 
@@ -357,7 +380,7 @@ All default parameters are defined in [`src/config/settings.py`](src/config/sett
 | Parameter | Default | Description |
 |---|---|---|
 | `DINO_MODEL_NAME` | `"dinov2_vits14"` | Model variant (ViT-S/14, 21M params) |
-| `DINO_INPUT_SIZE` | 56 | Input resolution (must be divisible by 14) |
+| `DINO_INPUT_SIZE` | 112 | Input resolution (must be divisible by 14) |
 | `DINO_BATCH_SIZE` | 128 | GPU batch size for feature extraction |
 | `DEVICE` | `None` | Compute device; auto-detects CUDA if available |
 

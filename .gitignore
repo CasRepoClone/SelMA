@@ -1,8 +1,6 @@
-./output/*
-./images_upright/*
-.venv
-./ai.md
+output/
+images_upright/
+.venv/
 ai.md
-./data/*
-./data
-data
+data/
+__pycache__/

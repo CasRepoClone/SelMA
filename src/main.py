@@ -1,3 +1,9 @@
+"""SelMA pipeline entry point.
+
+Runs the two-stage visual place recognition pipeline: coarse retrieval
+via DINOv2 patch features followed by RANSAC geometric re-ranking.
+"""
+
 import sys
 import time
 from pathlib import Path

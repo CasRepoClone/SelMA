@@ -1,3 +1,10 @@
+"""Canny edge detection, edge-point sampling, and patch extraction.
+
+Provides the front-end geometry processing that feeds into DINOv2
+feature extraction: detect structural edges, sample keypoints along
+them, and crop image patches centred on each keypoint.
+"""
+
 import cv2
 import numpy as np
 

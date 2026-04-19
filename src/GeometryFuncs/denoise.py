@@ -1,3 +1,9 @@
+"""Patch denoising utilities.
+
+Supports Gaussian blur (fast) and Non-Local Means (higher quality)
+denoising of extracted image patches before feature encoding.
+"""
+
 import cv2
 import numpy as np
 

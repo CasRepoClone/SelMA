@@ -1,3 +1,9 @@
+"""Default configuration parameters for the SelMA pipeline.
+
+All values can be overridden via CLI flags (see cli.py) or by modifying
+this module at runtime before pipeline execution.
+"""
+
 from pathlib import Path
 
 # ── Paths ──────────────────────────────────────────────────────────────

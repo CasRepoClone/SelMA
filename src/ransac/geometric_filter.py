@@ -1,3 +1,10 @@
+"""RANSAC geometric verification filter.
+
+Wraps OpenCV's findFundamentalMat, findHomography, and estimateAffine2D
+to verify spatial consistency of matched keypoints. Supports fundamental
+matrix, homography, and affine transform models.
+"""
+
 import cv2
 import numpy as np
 

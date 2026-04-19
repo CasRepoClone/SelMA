@@ -1,3 +1,5 @@
+"""Image loading and directory listing utilities."""
+
 from pathlib import Path
 
 import cv2

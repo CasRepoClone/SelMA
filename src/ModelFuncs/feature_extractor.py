@@ -1,3 +1,10 @@
+"""Feature extraction backends: DINOv2 ViT-S/14 and SIFT at edge keypoints.
+
+DINOv2Extractor encodes image patches into 384-d feature vectors using
+a self-supervised Vision Transformer. SIFTAtEdgeKeypoints detects SIFT
+features filtered to Canny edge locations for the benchmark pipeline.
+"""
+
 import torch
 import torchvision.transforms as T
 import numpy as np
