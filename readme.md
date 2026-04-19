@@ -11,6 +11,7 @@ A two-stage visual place recognition pipeline that combines structural edge-base
 - [Mathematical Foundations](#mathematical-foundations)
 - [Project Structure](#project-structure)
 - [Configuration Reference](#configuration-reference)
+- [Benchmark Evaluation](#benchmark-evaluation)
 - [Dataset](#dataset)
 - [Benchmark Results](#benchmark-results)
 - [References](#references)
@@ -99,10 +100,10 @@ python main.py [OPTIONS]
 | `--ransac-iters` | | Maximum RANSAC iterations | `2000` |
 | `--ransac-confidence` | | RANSAC confidence level | `0.999` |
 | `--ransac-min-inliers` | | Minimum inlier count to accept a match | `8` |
-| `--benchmark` | | Run benchmark evaluation instead of normal matching | `false` |
+| `--benchmark` | | Run benchmark evaluation (pose estimation) | off |
 | `--benchmark-scene` | | Path to benchmark scene directory | — |
-| `--benchmark-max-pairs` | | Limit number of pairs to evaluate | all |
-| `--benchmark-pose-method` | | Pose estimation method: `essential`, `fundamental` | `essential` |
+| `--benchmark-max-pairs` | | Limit number of evaluated pairs | all |
+| `--benchmark-pose-method` | | Pose method: `essential`, `fundamental` | `essential` |
 | `--descriptor` | | Descriptor type: `sift`, `dinov2` | `sift` |
 
 ### Examples
@@ -116,6 +117,9 @@ python main.py -q ../data/queries -d ../data/database -o ../results
 
 # Use homography model with stricter thresholds
 python main.py --ransac-method homography --ransac-reproj 3.0 --ransac-min-inliers 12
+
+# Run pose estimation benchmark on a phototourism scene
+python main.py --benchmark --benchmark-scene ../data/phototourism/reichstag --benchmark-max-pairs 100 --descriptor sift
 ```
 
 ### Output
@@ -133,6 +137,23 @@ output/<YYYYMMDD_HHMMSS>/
 ├── vis_spatial_db_<name>.jpg        # Feature similarity heatmap (database)
 └── vis_top10_<name>.jpg             # Top-10 candidate grid with scores
 ```
+
+### Benchmark Output
+
+When running `--benchmark`, results are saved to `output/benchmark/`:
+
+```
+output/benchmark/
+├── benchmark_<scene>.csv              # Per-pair pose errors and metrics
+├── summary_<scene>.txt                # Aggregated mAA and statistics
+├── kpmatches/                         # Postprocessed keypoints per image
+│   └── <image_stem>.jpg               #   All detected keypoints overlaid on the image
+└── topk/                              # Top-5 matching images per query
+    └── <image_stem>.jpg               #   Query + top-5 candidates grid with scores
+```
+
+- **kpmatches/** — Each scene image with all postprocessed SIFT keypoints drawn as green dots, labelled with the total keypoint count. This shows the edge-selective filtering output.
+- **topk/** — For each image, a grid showing the query on the left and its 5 best-matching images ranked by match count. Each candidate shows the inlier ratio (H), descriptor similarity (Sim), match count (RANSAC), and pass/fail status.
 
 ---
 
@@ -323,8 +344,8 @@ SelMA/
 │   │   └── denoise.py                # Gaussian / Non-Local Means denoising
 │   ├── ModelFuncs/
 │   │   ├── __init__.py
-│   │   ├── feature_extractor.py      # DINOv2 ViT-S/14 wrapper + SIFT extractor
-│   │   ├── matcher.py                # Cosine similarity, ranking, heuristic scoring
+│   │   ├── feature_extractor.py      # DINOv2 ViT-S/14 wrapper + SIFT edge extractor
+│   │   ├── matcher.py                # Cosine similarity, SIFT matching, ranking
 │   │   └── match_filter.py           # Pre-RANSAC match filtering
 │   ├── ransac/
 │   │   ├── __init__.py
@@ -335,13 +356,13 @@ SelMA/
 │   │   └── colmap_parser.py          # COLMAP binary model parser
 │   ├── benchmark/
 │   │   ├── __init__.py
-│   │   ├── dataset.py                # Benchmark scene loader (COLMAP / HDF5 / JSON)
+│   │   ├── dataset.py                # BenchmarkScene: COLMAP/HDF5/JSON calibration loader
 │   │   ├── evaluate.py               # Benchmark evaluation runner
-│   │   └── metrics.py                # Pose estimation and mAA metrics
+│   │   └── metrics.py                # Pose estimation, mAA, rotation/translation error
 │   └── evaluation/
 │       ├── __init__.py
 │       ├── dataset.py                # Evaluation scene loader
-│       ├── evaluate.py               # Evaluation runner with visualizations
+│       ├── evaluate.py               # Benchmark runner (pair evaluation + visualization)
 │       └── metrics.py                # Pose estimation and mAA metrics
 ├── scripts/
 │   ├── create_test_scene.py          # Generate synthetic benchmark scene
@@ -404,6 +425,40 @@ All default parameters are defined in [`src/config/settings.py`](src/config/sett
 | `RANSAC_MAX_ITERS` | 2000 | `--ransac-iters` | Maximum iterations |
 | `RANSAC_CONFIDENCE` | 0.999 | `--ransac-confidence` | Confidence level |
 | `RANSAC_MIN_INLIERS` | 8 | `--ransac-min-inliers` | Minimum inliers to accept |
+
+---
+
+## Benchmark Evaluation
+
+SelMA includes a pose estimation benchmark mode that evaluates matching quality against ground-truth camera poses from calibrated multi-view datasets (e.g., Phototourism scenes with COLMAP reconstructions).
+
+### Running the Benchmark
+
+```bash
+cd src
+python main.py --benchmark --benchmark-scene ../data/phototourism/reichstag \
+               --benchmark-max-pairs 100 --descriptor sift
+```
+
+The benchmark:
+
+1. **Extracts features** for each image using the SelMA pipeline (edge detection → SIFT at edge keypoints with CLAHE preprocessing and RootSIFT normalization).
+2. **Matches pairs** using bidirectional ratio-tested FLANN matching.
+3. **Estimates poses** via dual USAC_MAGSAC + USAC_PROSAC essential matrix estimation with Sampson error model selection.
+4. **Computes metrics** — rotation error, translation error, and mAA (mean Average Accuracy at 1°–10° thresholds).
+5. **Generates visualizations**:
+   - **kpmatches/** — Every scene image with all postprocessed keypoints drawn, showing the edge-selective filtering output.
+   - **topk/** — For each image, an all-vs-all matching grid showing its top-5 best-matching images ranked by match count, with inlier ratio, descriptor similarity, and pass/fail annotations.
+
+### SIFT Benchmark Configuration
+
+| Parameter | Value | Description |
+|---|---|---|
+| `SIFT_CONTRAST_THRESH` | 0.02 | SIFT contrast threshold (lower = more keypoints) |
+| `SIFT_RATIO_THRESH` | 0.75 | Lowe's ratio test threshold |
+| `KEYPOINT_MAX_CORNERS` | 3000 | Maximum keypoints per image |
+| `KEYPOINT_EDGE_PROXIMITY` | 15 | Minimum distance from image border (px) |
+| `MATCH_USE_MNN` | True | Mutual nearest neighbour (bidirectional) matching |
 
 ---
 
