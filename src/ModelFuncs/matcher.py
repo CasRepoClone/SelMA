@@ -12,14 +12,30 @@ import cv2
 from config import settings
 
 
-def cosine_similarity_matrix(features_a, features_b):
-    a_norm = features_a / (np.linalg.norm(features_a, axis=1, keepdims=True) + 1e-8)
-    b_norm = features_b / (np.linalg.norm(features_b, axis=1, keepdims=True) + 1e-8)
-    return a_norm @ b_norm.T
+def normalize_features(features):
+    """L2-normalize feature vectors (row-wise). Safe for zero vectors."""
+    norms = np.linalg.norm(features, axis=1, keepdims=True)
+    norms = np.maximum(norms, 1e-8)
+    return features / norms
+
+
+def cosine_similarity_matrix(features_a, features_b, prenormalized=False):
+    """Compute pairwise cosine similarity matrix.
+
+    Parameters
+    ----------
+    prenormalized : bool
+        If True, skip L2 normalization (features already unit-length).
+    """
+    if not prenormalized:
+        features_a = normalize_features(features_a)
+        features_b = normalize_features(features_b)
+    return features_a @ features_b.T
 
 
 def match_features(query_features, db_features, top_k=None,
-                   use_mnn=None, ratio_thresh=None, min_score=None):
+                   use_mnn=None, ratio_thresh=None, min_score=None,
+                   prenormalized=False):
     """Match query features to database features with robust filtering.
 
     Implements three complementary filters from the matching literature:
@@ -28,6 +44,11 @@ def match_features(query_features, db_features, top_k=None,
          where the 2nd-best is too close to the best
       3. **Mutual nearest neighbor** (SuperGlue/LightGlue) — keep only
          matches where both sides agree on the correspondence
+
+    Parameters
+    ----------
+    prenormalized : bool
+        If True, skip L2 normalization (features already unit-length).
     """
     top_k = top_k or settings.TOP_K_PATCHES
     use_mnn = use_mnn if use_mnn is not None else settings.MATCH_USE_MNN
@@ -39,7 +60,8 @@ def match_features(query_features, db_features, top_k=None,
     if query_features.shape[0] == 0 or db_features.shape[0] == 0:
         return [], 0.0, 0.0
 
-    sim_matrix = cosine_similarity_matrix(query_features, db_features)
+    sim_matrix = cosine_similarity_matrix(
+        query_features, db_features, prenormalized=prenormalized)
 
     # Forward matching: each query → its best database feature
     best_db_idx = np.argmax(sim_matrix, axis=1)
@@ -178,10 +200,16 @@ def match_sift(desc1, desc2, ratio_thresh=0.75, cross_check=False,
 
 def rank_db_images(query_features, db_entries, top_k_patches=None):
     top_k_patches = top_k_patches or settings.TOP_K_PATCHES
+
+    # Pre-normalize query features ONCE instead of per-DB-image
+    q_norm = normalize_features(query_features)
+
     scores = []
     for db_path, db_features in db_entries:
+        # Pre-normalize each DB feature set and use fast prenormalized path
+        d_norm = normalize_features(db_features)
         _, avg_sim, top_k_avg = match_features(
-            query_features, db_features, top_k=top_k_patches
+            q_norm, d_norm, top_k=top_k_patches, prenormalized=True
         )
         scores.append((db_path, avg_sim, top_k_avg))
 

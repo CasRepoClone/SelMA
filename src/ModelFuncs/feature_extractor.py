@@ -6,6 +6,7 @@ features filtered to Canny edge locations for the benchmark pipeline.
 """
 
 import torch
+import torch.nn.functional as F_torch
 import torchvision.transforms as T
 import numpy as np
 import cv2
@@ -73,15 +74,18 @@ class SIFTAtEdgeKeypoints:
         kernel = np.ones((kernel_size, kernel_size), np.uint8)
         edge_dilated = cv2.dilate(edge_map, kernel)
 
-        mask = []
-        for kp in kps:
-            x, y = int(round(kp.pt[0])), int(round(kp.pt[1]))
-            if 0 <= y < edge_dilated.shape[0] and 0 <= x < edge_dilated.shape[1]:
-                mask.append(edge_dilated[y, x] > 0)
-            else:
-                mask.append(False)
+        # Vectorized edge proximity check
+        coords = np.array([(int(round(kp.pt[0])), int(round(kp.pt[1])))
+                           for kp in kps], dtype=np.int32)
+        xs, ys = coords[:, 0], coords[:, 1]
+        h_ed, w_ed = edge_dilated.shape[:2]
+        in_bounds = (ys >= 0) & (ys < h_ed) & (xs >= 0) & (xs < w_ed)
+        mask = np.zeros(len(kps), dtype=bool)
+        bounded_idx = np.where(in_bounds)[0]
+        if len(bounded_idx) > 0:
+            mask[bounded_idx] = edge_dilated[
+                ys[bounded_idx], xs[bounded_idx]] > 0
 
-        mask = np.array(mask, dtype=bool)
         if mask.sum() == 0:
             return None, []
 
@@ -126,6 +130,17 @@ class DINOv2Extractor:
         )
         self.model.eval().to(self.device)
 
+        # Pre-compute normalization tensors for batch processing
+        self._mean = torch.tensor(
+            settings.DINO_MEAN, dtype=torch.float32).view(1, 3, 1, 1)
+        self._std = torch.tensor(
+            settings.DINO_STD, dtype=torch.float32).view(1, 3, 1, 1)
+        self._input_size = settings.DINO_INPUT_SIZE
+
+        # Enable FP16 automatic mixed precision on CUDA
+        self._use_amp = (self.device.type == "cuda")
+
+        # Keep legacy transform as fallback for edge cases
         self.transform = T.Compose([
             T.ToPILImage(),
             T.Resize((settings.DINO_INPUT_SIZE, settings.DINO_INPUT_SIZE)),
@@ -133,24 +148,69 @@ class DINOv2Extractor:
             T.Normalize(mean=settings.DINO_MEAN, std=settings.DINO_STD),
         ])
 
-    @torch.no_grad()
+    def _prepare_batch_tensor(self, patches):
+        """Convert list of numpy patches to a normalized (N,3,H,W) tensor.
+
+        Replaces the per-patch ToPILImage → Resize → ToTensor → Normalize
+        pipeline with a single batched operation for major speed gains.
+        """
+        # Handle grayscale → 3-channel conversion
+        needs_convert = False
+        for p in patches:
+            if len(p.shape) == 2 or (len(p.shape) == 3 and p.shape[2] == 1):
+                needs_convert = True
+                break
+
+        if needs_convert:
+            processed = []
+            for patch in patches:
+                if len(patch.shape) == 2:
+                    patch = np.stack([patch, patch, patch], axis=-1)
+                elif patch.shape[2] == 1:
+                    patch = np.concatenate([patch, patch, patch], axis=-1)
+                processed.append(patch)
+            batch_np = np.stack(processed, axis=0)
+        else:
+            # Fast path: all patches are 3-channel, stack directly
+            batch_np = np.stack(patches, axis=0)
+
+        # (N, H, W, 3) uint8 → (N, 3, H, W) float32 [0, 1]
+        batch_tensor = torch.from_numpy(
+            batch_np).permute(0, 3, 1, 2).float().div_(255.0)
+
+        # Batch resize to DINOv2 input size
+        h, w = batch_tensor.shape[2], batch_tensor.shape[3]
+        if h != self._input_size or w != self._input_size:
+            batch_tensor = F_torch.interpolate(
+                batch_tensor,
+                size=(self._input_size, self._input_size),
+                mode='bilinear',
+                align_corners=False,
+            )
+
+        # Batch normalize (ImageNet stats)
+        batch_tensor.sub_(self._mean).div_(self._std)
+
+        return batch_tensor
+
+    @torch.inference_mode()
     def extract(self, patches):
         if len(patches) == 0:
             return np.empty((0, self.model.embed_dim), dtype=np.float32)
 
-        tensors = []
-        for patch in patches:
-            if len(patch.shape) == 2:
-                patch = np.stack([patch] * 3, axis=-1)
-            elif patch.shape[2] == 1:
-                patch = np.concatenate([patch] * 3, axis=-1)
-            tensors.append(self.transform(patch))
+        # Batch tensor preparation (replaces per-patch PIL transform)
+        batch_tensor = self._prepare_batch_tensor(patches)
 
         all_features = []
         batch_size = settings.DINO_BATCH_SIZE
-        for i in range(0, len(tensors), batch_size):
-            batch = torch.stack(tensors[i:i + batch_size]).to(self.device)
-            features = self.model(batch)
+        for i in range(0, len(batch_tensor), batch_size):
+            batch = batch_tensor[i:i + batch_size].to(self.device)
+            if self._use_amp:
+                with torch.amp.autocast('cuda'):
+                    features = self.model(batch)
+                features = features.float()
+            else:
+                features = self.model(batch)
             all_features.append(features.cpu().numpy())
 
         return np.concatenate(all_features, axis=0)

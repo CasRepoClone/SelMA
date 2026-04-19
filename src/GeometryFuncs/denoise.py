@@ -47,4 +47,16 @@ def denoise_patch(patch, method=None, **kwargs):
 
 
 def denoise_patches(patches, **kwargs):
-    return [denoise_patch(p, **kwargs) for p in patches]
+    method = kwargs.pop('method', None) or settings.DENOISE_METHOD
+    if method == "gaussian":
+        kernel_size = kwargs.get('kernel_size') or settings.DENOISE_GAUSSIAN_KERNEL
+        ks = int(kernel_size)
+        result = []
+        for p in patches:
+            try:
+                result.append(cv2.GaussianBlur(p, (ks, ks), 0))
+            except cv2.error:
+                result.append(p)
+        return result
+    else:
+        return [denoise_patch(p, method=method, **kwargs) for p in patches]
