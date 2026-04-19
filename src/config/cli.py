@@ -65,6 +65,38 @@ def parse_args(argv=None):
         help=f"Minimum RANSAC inliers (default: {settings.RANSAC_MIN_INLIERS})",
     )
 
+    # ── Benchmark ──────────────────────────────────────────────────────
+    p.add_argument(
+        "--benchmark",
+        action="store_true",
+        default=False,
+        help="Run benchmark evaluation instead of normal matching",
+    )
+    p.add_argument(
+        "--benchmark-scene",
+        type=Path,
+        default=None,
+        help="Path to benchmark scene (with calibration.h5 or .json + images)",
+    )
+    p.add_argument(
+        "--benchmark-max-pairs",
+        type=int,
+        default=None,
+        help="Limit number of pairs to evaluate (default: all)",
+    )
+    p.add_argument(
+        "--benchmark-pose-method",
+        choices=("essential", "fundamental"),
+        default=None,
+        help=f"Pose estimation method (default: {settings.BENCHMARK_POSE_METHOD})",
+    )
+    p.add_argument(
+        "--descriptor",
+        choices=("sift", "dinov2"),
+        default="sift",
+        help="Descriptor type: sift (default) or dinov2",
+    )
+
     return p.parse_args(argv)
 
 
@@ -87,3 +119,11 @@ def apply_overrides(args):
         settings.RANSAC_CONFIDENCE = args.ransac_confidence
     if args.ransac_min_inliers is not None:
         settings.RANSAC_MIN_INLIERS = args.ransac_min_inliers
+
+    # benchmark overrides
+    if getattr(args, "benchmark_scene", None) is not None:
+        settings.BENCHMARK_SCENE = args.benchmark_scene.resolve()
+    if getattr(args, "benchmark_max_pairs", None) is not None:
+        settings.BENCHMARK_MAX_PAIRS = args.benchmark_max_pairs
+    if getattr(args, "benchmark_pose_method", None) is not None:
+        settings.BENCHMARK_POSE_METHOD = args.benchmark_pose_method
