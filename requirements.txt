@@ -13,10 +13,10 @@ networkx==3.6.1
 numpy==2.4.3
 opencv-python==4.13.0.92
 packaging==26.1
-pillow==12.1.1
+pillow==12.2.0
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
-setuptools==70.2.0
+setuptools==78.1.1
 six==1.17.0
 sympy==1.14.0
 torch==2.11.0+cu128
