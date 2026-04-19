@@ -38,6 +38,26 @@ def main():
     args = parse_args()
     apply_overrides(args)
 
+    # ── Benchmark mode ────────────────────────────────────────────────
+    if getattr(args, "benchmark", False):
+        from evaluation.evaluate import BenchmarkEvaluator
+
+        scene = settings.BENCHMARK_SCENE
+        if scene is None:
+            print("Error: --benchmark-scene is required in benchmark mode.")
+            sys.exit(1)
+
+        evaluator = BenchmarkEvaluator(
+            scene_path=scene,
+            output_dir=settings.OUTPUT_DIR,
+            max_pairs=settings.BENCHMARK_MAX_PAIRS,
+            pose_method=settings.BENCHMARK_POSE_METHOD,
+            descriptor=getattr(args, "descriptor", "sift"),
+        )
+        evaluator.evaluate()
+        return
+
+    # ── Normal matching mode ──────────────────────────────────────────
     t_start = time.time()
     print("Loading DINOv2 model...")
     extractor = DINOv2Extractor()

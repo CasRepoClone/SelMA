@@ -46,6 +46,49 @@ def extract_patches(image, points, patch_size=None):
     return patches, valid_points
 
 
+def detect_edge_keypoints(gray, edge_map, max_corners=None,
+                          quality_level=None, min_distance=None,
+                          edge_proximity=None):
+    """Detect Shi-Tomasi corners near edges for repeatable keypoints.
+
+    Inspired by SuperPoint-style interest point detection: find the most
+    distinctive locations (corners, junctions) that lie on or near Canny
+    edges — keeping SelMA's edge-based identity while improving
+    repeatability across viewpoints.
+    """
+    max_corners = max_corners or settings.KEYPOINT_MAX_CORNERS
+    quality_level = quality_level or settings.KEYPOINT_QUALITY_LEVEL
+    min_distance = min_distance or settings.KEYPOINT_MIN_DISTANCE
+    edge_proximity = edge_proximity or settings.KEYPOINT_EDGE_PROXIMITY
+
+    corners = cv2.goodFeaturesToTrack(
+        gray, maxCorners=max_corners * 2,
+        qualityLevel=quality_level,
+        minDistance=min_distance,
+    )
+
+    if corners is None or len(corners) == 0:
+        return np.empty((0, 2), dtype=int)
+
+    # Dilate edge map so corners within `edge_proximity` pixels count
+    kernel_size = edge_proximity * 2 + 1
+    kernel = np.ones((kernel_size, kernel_size), np.uint8)
+    edge_dilated = cv2.dilate(edge_map, kernel)
+
+    points = corners.reshape(-1, 2)
+    valid = []
+    for x, y in points:
+        xi, yi = int(round(x)), int(round(y))
+        if 0 <= yi < edge_dilated.shape[0] and 0 <= xi < edge_dilated.shape[1]:
+            if edge_dilated[yi, xi] > 0:
+                valid.append((xi, yi))
+
+    if len(valid) > max_corners:
+        valid = valid[:max_corners]
+
+    return np.array(valid, dtype=int) if valid else np.empty((0, 2), dtype=int)
+
+
 def get_edge_patches(image, patch_size=None, spacing=None,
                      low_thresh=None, high_thresh=None, max_patches=None):
     patch_size = patch_size or settings.PATCH_SIZE
@@ -60,7 +103,16 @@ def get_edge_patches(image, patch_size=None, spacing=None,
         gray = image
 
     edge_map = detect_edges(gray, low_thresh, high_thresh)
-    points = sample_edge_points(edge_map, spacing)
+
+    # Keypoint detection: Shi-Tomasi corners near edges (repeatable)
+    # Falls back to uniform edge sampling if too few keypoints found
+    if settings.USE_EDGE_KEYPOINTS:
+        points = detect_edge_keypoints(gray, edge_map)
+        if len(points) < 10:
+            points = sample_edge_points(edge_map, spacing)
+    else:
+        points = sample_edge_points(edge_map, spacing)
+
     patches, valid_points = extract_patches(image, points, patch_size)
 
     if len(patches) > max_patches:

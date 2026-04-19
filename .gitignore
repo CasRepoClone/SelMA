@@ -3,3 +3,6 @@
 .venv
 ./ai.md
 ai.md
+./data/*
+./data
+data
