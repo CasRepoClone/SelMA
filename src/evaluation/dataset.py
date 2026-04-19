@@ -85,11 +85,6 @@ class BenchmarkScene:
         from calibration.colmap_parser import load_colmap_calibration
         return load_colmap_calibration(sparse_dir)
 
-        raise FileNotFoundError(
-            f"No calibration file found in {self.scene_path}. "
-            f"Provide calibration.h5 or calibration.json."
-        )
-
     @staticmethod
     def _load_h5_calibration(path):
         try:

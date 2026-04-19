@@ -1,3 +1,5 @@
+"""Result persistence: timestamped run folders, CSV output, and image copies."""
+
 import csv
 import shutil
 from datetime import datetime

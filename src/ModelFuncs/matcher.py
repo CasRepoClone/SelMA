@@ -1,3 +1,11 @@
+"""Feature matching, ranking, and heuristic scoring.
+
+Implements cosine-similarity matching with mutual nearest neighbor
+filtering, database image ranking via top-k patch similarity, SIFT
+descriptor matching with Lowe's ratio test, and the combined heuristic
+score used for final re-ranking after RANSAC verification.
+"""
+
 import numpy as np
 import cv2
 

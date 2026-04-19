@@ -1,3 +1,9 @@
+"""Visualization utilities for match results.
+
+Generates side-by-side keypoint match images, RANSAC inlier/outlier
+overlays, spatial feature heatmaps, and top-N candidate grid views.
+"""
+
 import cv2
 import numpy as np
 import matplotlib
