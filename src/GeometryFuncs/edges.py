@@ -53,6 +53,7 @@ def extract_patches(image, points, patch_size=None):
     if len(valid_pts) == 0:
         return [], []
 
+    # Extract patches — valid_pts columns are (x, y)
     patches = [image[y - half:y + half, x - half:x + half].copy()
                for x, y in valid_pts]
     valid_points = [(int(x), int(y)) for x, y in valid_pts]

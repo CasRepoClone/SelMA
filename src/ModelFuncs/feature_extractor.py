@@ -153,13 +153,25 @@ class DINOv2Extractor:
 
         Replaces the per-patch ToPILImage → Resize → ToTensor → Normalize
         pipeline with a single batched operation for major speed gains.
+
+        Parameters
+        ----------
+        patches : list[ndarray]
+            Image patches as uint8 arrays, each (H, W, 3) BGR or (H, W)
+            grayscale. All patches must have the same spatial dimensions.
+
+        Returns
+        -------
+        torch.Tensor
+            Batch tensor of shape (N, 3, input_size, input_size), float32,
+            normalized with ImageNet mean/std, on CPU.
         """
-        # Handle grayscale → 3-channel conversion
+        # Handle grayscale → 3-channel (check first patch; pipeline
+        # produces uniform formats but mixed is supported)
         needs_convert = False
-        for p in patches:
-            if len(p.shape) == 2 or (len(p.shape) == 3 and p.shape[2] == 1):
-                needs_convert = True
-                break
+        if len(patches[0].shape) == 2 or (
+                len(patches[0].shape) == 3 and patches[0].shape[2] == 1):
+            needs_convert = True
 
         if needs_convert:
             processed = []

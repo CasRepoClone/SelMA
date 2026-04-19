@@ -47,7 +47,7 @@ def denoise_patch(patch, method=None, **kwargs):
 
 
 def denoise_patches(patches, **kwargs):
-    method = kwargs.pop('method', None) or settings.DENOISE_METHOD
+    method = kwargs.get('method') or settings.DENOISE_METHOD
     if method == "gaussian":
         kernel_size = kwargs.get('kernel_size') or settings.DENOISE_GAUSSIAN_KERNEL
         ks = int(kernel_size)
@@ -59,4 +59,6 @@ def denoise_patches(patches, **kwargs):
                 result.append(p)
         return result
     else:
-        return [denoise_patch(p, method=method, **kwargs) for p in patches]
+        # Pass method explicitly; filter it from kwargs to avoid duplication
+        fwd_kwargs = {k: v for k, v in kwargs.items() if k != 'method'}
+        return [denoise_patch(p, method=method, **fwd_kwargs) for p in patches]
